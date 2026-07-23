@@ -1,0 +1,5 @@
+/plugin/bin/
+/dist/
+reducer/dist/
+*.out
+.DS_Store
