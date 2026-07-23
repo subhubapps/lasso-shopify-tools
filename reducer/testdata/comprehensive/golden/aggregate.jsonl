@@ -1,0 +1,4 @@
+{"lead_slug":"LD-ACME","amount":225.00,"revenue_date":"2026-01-20","description":"2 Subscriptions","external_identifier":"loop-monthly-LD-ACME-2026-01-USD"}
+{"lead_slug":"LD-ACME","amount":100.00,"revenue_date":"2026-02-10","description":"1 Subscription","external_identifier":"loop-monthly-LD-ACME-2026-02-USD"}
+{"lead_slug":"LD-CHEST","amount":132.00,"revenue_date":"2026-01-28","description":"2 Subscriptions + 1 Usage Record","external_identifier":"loop-monthly-LD-CHEST-2026-01-USD"}
+{"lead_slug":"LD-USE","amount":20.00,"revenue_date":"2026-03-15","description":"4 Usage Records","external_identifier":"loop-monthly-LD-USE-2026-03-USD"}

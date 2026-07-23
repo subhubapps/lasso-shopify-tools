@@ -1,0 +1,43 @@
+{
+  "rows_read": 14,
+  "skipped_no_charge_id": 2,
+  "matched_rows": 10,
+  "unmatched_rows": 2,
+  "unmatched_shops": 1,
+  "aggregate_rows": 4,
+  "total_amount": 477.00,
+  "by_month": [
+    {
+      "month": "2026-01",
+      "rows": 2,
+      "amount": 357.00
+    },
+    {
+      "month": "2026-02",
+      "rows": 1,
+      "amount": 100.00
+    },
+    {
+      "month": "2026-03",
+      "rows": 1,
+      "amount": 20.00
+    }
+  ],
+  "by_currency": [
+    {
+      "currency": "USD",
+      "rows": 4,
+      "amount": 477.00
+    }
+  ],
+  "new_estimate": 3,
+  "guardrail": {
+    "settled_upload_safe": true,
+    "api_revenue_sync_disabled": true,
+    "warning": ""
+  },
+  "prefix": "loop-monthly",
+  "warnings": [
+    "1 row(s) had a zero Partner Sale; used the unscaled Partner Share for those rows"
+  ]
+}
