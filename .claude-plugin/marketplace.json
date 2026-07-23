@@ -1,0 +1,15 @@
+{
+  "name": "lasso-shopify-tools",
+  "owner": {
+    "name": "Lasso",
+    "email": "engineering@lassotech.com"
+  },
+  "description": "Lasso Shopify payout upload tools: a local, constant-memory CSV reducer plus a Claude Code plugin that batches settled revenue into Lasso.",
+  "plugins": [
+    {
+      "name": "lasso-shopify-payout",
+      "source": "./plugin",
+      "description": "Reduce a multi-GB Shopify Partner earnings CSV locally, then upload settled payout revenue to Lasso in reviewed, explicitly approved batches."
+    }
+  ]
+}
