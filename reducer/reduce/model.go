@@ -59,12 +59,13 @@ type NeutralRow struct {
 
 // UnmatchedShop is one row of the store-linking worklist: a CSV shop domain
 // that matched no store-map entry. Its rows NEVER contribute to the aggregate.
+// TotalTenThousandths is the summed scaled amount in exact integer 1e-4 units.
 type UnmatchedShop struct {
-	Subdomain   string
-	FirstMonth  string // earliest YYYY-MM seen
-	LastMonth   string // latest YYYY-MM seen
-	RowCount    int
-	TotalAmount float64 // summed scaled amount
+	Subdomain           string
+	FirstMonth          string // earliest YYYY-MM seen ("" if no row had a parseable date)
+	LastMonth           string // latest YYYY-MM seen
+	RowCount            int
+	TotalTenThousandths int64 // summed scaled amount, integer ten-thousandths
 }
 
 // Preview is the human/agent-facing summary written to preview.json. Its counts
@@ -72,19 +73,24 @@ type UnmatchedShop struct {
 // count, the unmatched counts equal unmatched_shops.csv, and TotalAmount equals
 // the sum of emitted row amounts.
 type Preview struct {
-	RowsRead          int              `json:"rows_read"`
-	SkippedNoChargeID int              `json:"skipped_no_charge_id"`
-	MatchedRows       int              `json:"matched_rows"`
-	UnmatchedRows     int              `json:"unmatched_rows"`
-	UnmatchedShops    int              `json:"unmatched_shops"`
-	AggregateRows     int              `json:"aggregate_rows"`
-	TotalAmount       json.Number      `json:"total_amount"`
-	ByMonth           []MonthBucket    `json:"by_month"`
-	ByCurrency        []CurrencyBucket `json:"by_currency"`
-	NewEstimate       *int             `json:"new_estimate"`
-	Guardrail         Guardrail        `json:"guardrail"`
-	Prefix            string           `json:"prefix"`
-	Warnings          []string         `json:"warnings"`
+	RowsRead           int              `json:"rows_read"`
+	SkippedNoChargeID  int              `json:"skipped_no_charge_id"`
+	SkippedBlankAmount int              `json:"skipped_blank_amount"`
+	SkippedNoRecordAt  int              `json:"skipped_no_recorded_at"`
+	MatchedRows        int              `json:"matched_rows"`
+	UnmatchedRows      int              `json:"unmatched_rows"`
+	UnmatchedShops     int              `json:"unmatched_shops"`
+	AggregateRows      int              `json:"aggregate_rows"`
+	SubscriptionCount  int              `json:"subscription_count"`
+	UsageRecordCount   int              `json:"usage_record_count"`
+	OtherCount         int              `json:"other_count"`
+	TotalAmount        json.Number      `json:"total_amount"`
+	ByMonth            []MonthBucket    `json:"by_month"`
+	ByCurrency         []CurrencyBucket `json:"by_currency"`
+	NewEstimate        *int             `json:"new_estimate"`
+	Guardrail          Guardrail        `json:"guardrail"`
+	Prefix             string           `json:"prefix"`
+	Warnings           []string         `json:"warnings"`
 }
 
 // MonthBucket is a per-month rollup: Rows is the number of aggregate rows in

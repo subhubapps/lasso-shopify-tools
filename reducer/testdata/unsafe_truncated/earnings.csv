@@ -1,3 +1,3 @@
-Shop,Charge ID,Charge Creation Time,Type,Partner Share,Partner Sale,Partner Sale In Payout Currency,Payout Currency
-acme,AC1,2026-04-05T10:00:00Z,Subscription,100.00,100.00,100.00,USD
-acme,AC2,2026-04-20T10:00:00Z,Usage Charge,10.00,100.00,100.00,USD
+Shop,Charge ID,Charge Creation Time,Charge Type,Partner Share,Partner Sale,Partner Sale In Payout Currency,Payout Currency
+acme,gid://shopify/AppSubscription/1,2026-04-05T10:00:00Z,Recurring,100.00,100.00,100.00,USD
+acme,gid://shopify/AppUsageRecord/2,2026-04-20T10:00:00Z,Usage,10.00,100.00,100.00,USD

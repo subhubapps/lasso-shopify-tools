@@ -1,10 +1,15 @@
 {
   "rows_read": 2,
   "skipped_no_charge_id": 0,
+  "skipped_blank_amount": 0,
+  "skipped_no_recorded_at": 0,
   "matched_rows": 2,
   "unmatched_rows": 0,
   "unmatched_shops": 0,
   "aggregate_rows": 1,
+  "subscription_count": 1,
+  "usage_record_count": 1,
+  "other_count": 0,
   "total_amount": 110.00,
   "by_month": [
     {

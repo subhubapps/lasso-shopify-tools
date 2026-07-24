@@ -75,7 +75,7 @@ func writeUnmatched(path string, shops []UnmatchedShop) error {
 			s.FirstMonth,
 			s.LastMonth,
 			strconv.Itoa(s.RowCount),
-			strconv.FormatFloat(round2(s.TotalAmount), 'f', 2, 64),
+			moneyFromTenThousandths(s.TotalTenThousandths).String(),
 		}
 		if err := w.Write(rec); err != nil {
 			return fmt.Errorf("writing %s row: %w", UnmatchedFile, err)

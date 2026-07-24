@@ -1,15 +1,21 @@
-Shop,Charge ID,Charge Creation Time,Type,Partner Share,Partner Sale,Partner Sale In Payout Currency,Payout Currency
-Chestnuts,CH1,2026-01-03T10:00:00Z,"Subscription",80.00,100.00,90.00,USD
-acme.myshopify.com,AC1,2026-01-15T08:00:00Z,Subscription,200.00,200.00,200.00,USD
-usageonly,U1,2026-03-05T00:00:00Z,"Usage Charge",5.00,100.00,100.00,USD
-Chestnuts.myshopify.com,CH2,2026-01-28T12:00:00Z,Subscription,50.00,100.00,100.00,USD
-acme,AC2,2026-01-20T08:00:00Z,Subscription,25.00,0,0,USD
-unknownshop.myshopify.com,UK1,2026-01-12T00:00:00Z,Subscription,40.00,100.00,100.00,USD
-UsageOnly,U2,2026-03-11T00:00:00Z,Usage Charge,5.00,100.00,100.00,USD
-acme,,2026-01-09T00:00:00Z,Subscription,-30.00,100.00,100.00,USD
-chestnuts,CH3,2026-01-30T09:00:00Z,Usage Charge,10.00,100.00,100.00,USD
-usageonly.myshopify.com,U3,2026-03-15T00:00:00Z,Usage Charge,5.00,100.00,100.00,USD
-ACME.myshopify.com,AC3,2026-02-10T08:00:00Z,Subscription,100.00,100.00,100.00,USD
-chestnuts,,2026-01-10T00:00:00Z,Usage Charge,-5.00,100.00,100.00,USD
-usageonly,U4,2026-03-09T00:00:00Z,Usage Charge,5.00,100.00,100.00,USD
-unknownshop,UK2,2026-02-02T00:00:00Z,Usage Charge,15.00,100.00,100.00,USD
+Shop,Charge ID,Charge Creation Time,Charge Type,Category,Partner Share,Partner Sale,Partner Sale In Payout Currency,Payout Currency
+Chestnuts,gid://shopify/AppSubscription/1001,2026-01-03T10:00:00Z,Recurring,app_subscription,80.00,100.00,90.00,USD
+chestnuts,gid://shopify/AppSubscription/1002,2026-01-28T12:00:00Z,Recurring,app_subscription,50.00,100.00,100.00,USD
+Chestnuts.myshopify.com,gid://shopify/AppUsageRecord/1003,2026-01-30T09:00:00Z,Subscription,app_subscription,10.00,100.00,100.00,USD
+chestnuts,gid://shopify/AppOneTimeSale/1004,2026-01-15T00:00:00Z,Subscription,app_subscription,5.00,100.00,100.00,USD
+acme.myshopify.com,gid://shopify/AppSubscription/2001,2026-01-15T08:00:00Z,Recurring,app_subscription,200.00,200.00,200.00,USD
+acme,gid://shopify/AppSubscription/2002,2026-01-20T08:00:00Z,Recurring,app_subscription,25.00,0,0,USD
+ACME.myshopify.com,gid://shopify/AppSubscription/2003,2026-02-10T08:00:00Z,Recurring,app_subscription,100.00,100.00,100.00,USD
+usageonly,gid://shopify/AppUsageRecord/3001,2026-03-05T00:00:00Z,Usage,app_usage_record,5.00,100.00,100.00,USD
+UsageOnly,gid://shopify/AppUsageRecord/3002,2026-03-11T00:00:00Z,Usage,app_usage_record,5.00,100.00,100.00,USD
+usageonly.myshopify.com,gid://shopify/AppUsageRecord/3003,2026-03-15T00:00:00Z,Usage,app_usage_record,5.00,100.00,100.00,USD
+usageonly,gid://shopify/AppUsageRecord/3004,2026-03-09T00:00:00Z,Usage,app_usage_record,5.00,100.00,100.00,USD
+penny,gid://shopify/AppSubscription/4001,2026-05-10T00:00:00Z,Recurring,app_subscription,12.345,1.00,1.00,USD
+thirds,gid://shopify/AppSubscription/5001,2026-06-05T00:00:00Z,Recurring,app_subscription,100.00,3.00,1.00,USD
+thirds,gid://shopify/AppSubscription/5002,2026-06-12T00:00:00Z,Recurring,app_subscription,100.00,3.00,1.00,USD
+thirds,gid://shopify/AppSubscription/5003,2026-06-20T00:00:00Z,Recurring,app_subscription,100.00,3.00,1.00,USD
+acme,,2026-01-09T00:00:00Z,Recurring,app_subscription,-30.00,100.00,100.00,USD
+chestnuts,gid://shopify/AppSubscription/9001,2026-01-10T00:00:00Z,Recurring,app_subscription,,100.00,100.00,USD
+chestnuts,gid://shopify/AppUsageRecord/9002,not-a-date,Usage,app_usage_record,10.00,100.00,100.00,USD
+unknownshop.myshopify.com,gid://shopify/AppSubscription/6001,2026-01-12T00:00:00Z,Recurring,app_subscription,40.00,100.00,100.00,USD
+unknownshop,gid://shopify/AppUsageRecord/6002,2026-02-02T00:00:00Z,Usage,app_usage_record,15.00,100.00,100.00,USD

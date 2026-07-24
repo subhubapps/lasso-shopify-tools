@@ -1,16 +1,21 @@
 {
-  "rows_read": 14,
-  "skipped_no_charge_id": 2,
-  "matched_rows": 10,
+  "rows_read": 20,
+  "skipped_no_charge_id": 1,
+  "skipped_blank_amount": 1,
+  "skipped_no_recorded_at": 1,
+  "matched_rows": 15,
   "unmatched_rows": 2,
   "unmatched_shops": 1,
-  "aggregate_rows": 4,
-  "total_amount": 477.00,
+  "aggregate_rows": 6,
+  "subscription_count": 9,
+  "usage_record_count": 5,
+  "other_count": 1,
+  "total_amount": 594.35,
   "by_month": [
     {
       "month": "2026-01",
       "rows": 2,
-      "amount": 357.00
+      "amount": 362.00
     },
     {
       "month": "2026-02",
@@ -21,16 +26,26 @@
       "month": "2026-03",
       "rows": 1,
       "amount": 20.00
+    },
+    {
+      "month": "2026-05",
+      "rows": 1,
+      "amount": 12.35
+    },
+    {
+      "month": "2026-06",
+      "rows": 1,
+      "amount": 100.00
     }
   ],
   "by_currency": [
     {
       "currency": "USD",
-      "rows": 4,
-      "amount": 477.00
+      "rows": 6,
+      "amount": 594.35
     }
   ],
-  "new_estimate": 3,
+  "new_estimate": 5,
   "guardrail": {
     "settled_upload_safe": true,
     "api_revenue_sync_disabled": true,

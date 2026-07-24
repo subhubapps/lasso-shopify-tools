@@ -8,28 +8,26 @@
 //	reducer --src earnings.csv --store-map map.json [--prefix loop-monthly] --out ./out
 //	reducer --version
 //
-// ASSUMED Shopify Partner "Earnings" CSV schema (resolved case-insensitively by
-// header NAME on the first record; verify against a real export - see
-// reducer/README.md). Required columns:
+// Shopify Partner "Earnings" CSV schema (resolved case-insensitively by header
+// NAME on the first record, order-independent - see reducer/README.md). These
+// are the exact columns 02_build_per_charge.rb reads. Required columns:
 //
-//	Charge ID                        - empty => refund/downgrade/credit, skipped
+//	Shop                             - shop domain (joined to the store map)
+//	Charge ID                        - the charge GID; empty => refund/credit, skipped
 //	Charge Creation Time             - ISO-8601 / space-separated timestamp
 //	Partner Share                    - partner earnings in the sale currency
 //	Partner Sale                     - sale amount in the sale currency
 //	Partner Sale In Payout Currency  - sale amount in the payout currency
-//	shop domain    - first present of: Shop, Store, Myshopify Domain,
-//	                 Shop Domain, Store Domain, Shop Name, Domain
-//	charge type    - first present of: Type, Charge Type
 //
 // Optional column (absent => USD assumed for every row, with a warning):
 //
-//	payout currency - first present of: Payout Currency, Currency,
-//	                  Charge Currency, Partner Sale Currency
+//	Payout Currency                  - blank values default to USD, with a warning
 //
-// Charge-type classification (documented default): a type whose lowercased text
-// contains "subscription" or "recurring" is a SUBSCRIPTION; every other type is
-// a USAGE record. This is the single knob to adjust if a real export uses other
-// spellings.
+// Classification is by the Charge ID GID (matching 03_aggregate_monthly.rb): a
+// Charge ID containing "AppSubscription" is a SUBSCRIPTION, one containing
+// "AppUsageRecord" is a USAGE record, anything else is OTHER. The Charge Type
+// and Category columns are diagnostic-only: never required, never used to
+// classify. Extra columns in the export are ignored.
 package main
 
 import (

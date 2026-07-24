@@ -4,15 +4,28 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math/big"
 	"runtime"
 	"strings"
 	"testing"
 )
 
-// testHeader is the full assumed header used by the inline behavior fixtures.
-const testHeader = "Shop,Charge ID,Charge Creation Time,Type,Partner Share,Partner Sale,Partner Sale In Payout Currency,Payout Currency\n"
+// testHeader is the full real Shopify Partner "Earnings" header used by the
+// inline behavior fixtures. It deliberately includes the diagnostic Charge Type
+// column (position 3) so the tests prove classification IGNORES it and keys off
+// the Charge ID GID (position 1) instead.
+const testHeader = "Shop,Charge ID,Charge Creation Time,Charge Type,Partner Share,Partner Sale,Partner Sale In Payout Currency,Payout Currency\n"
 
 func boolPtr(b bool) *bool { return &b }
+
+// rat parses a decimal string into a big.Rat for the helper unit tests.
+func rat(s string) *big.Rat {
+	r, ok := new(big.Rat).SetString(s)
+	if !ok {
+		panic("bad rat: " + s)
+	}
+	return r
+}
 
 // safeMap builds a store map that is safe for settled upload with the default
 // loop-monthly prefix and the given stores.
@@ -73,70 +86,140 @@ func TestNormalizeSubdomain(t *testing.T) {
 	}
 }
 
-func TestParseAmount(t *testing.T) {
-	ok := map[string]float64{
-		"":          0,
-		"   ":       0,
-		"12.5":      12.5,
-		"1,234.56":  1234.56,
-		"$50.00":    50,
-		"  80.00  ": 80,
-		"-30.00":    -30,
-		"€99.99":    99.99,
+// TestClassify pins the GID-substring classification to 03_aggregate_monthly.rb:
+// AppSubscription -> subscription, AppUsageRecord -> usage, else -> other.
+func TestClassify(t *testing.T) {
+	cases := map[string]category{
+		"gid://shopify/AppSubscription/123":     catSubscription,
+		"gid://shopify/AppUsageRecord/456":      catUsage,
+		"gid://shopify/AppOneTimeSale/789":      catOther,
+		"gid://shopify/AppSubscriptionCredit/1": catSubscription, // substring match, like Ruby include?
+		"gid://shopify/AppUsageRecordAdjust/2":  catUsage,
+		"":                                      catOther,
+		"adjustment-no-gid":                     catOther,
 	}
-	for in, want := range ok {
-		got, err := parseAmount(in)
-		if err != nil {
-			t.Errorf("parseAmount(%q) unexpected error: %v", in, err)
-			continue
+	for in, want := range cases {
+		if got := classify(in); got != want {
+			t.Errorf("classify(%q) = %d, want %d", in, got, want)
 		}
-		if got != want {
-			t.Errorf("parseAmount(%q) = %v, want %v", in, got, want)
-		}
-	}
-	if _, err := parseAmount("not-a-number"); err == nil {
-		t.Errorf("parseAmount(\"not-a-number\") expected an error")
 	}
 }
 
-func TestRound2AndMoney(t *testing.T) {
-	// round half away from zero (0.125 and 12.5 are exactly representable).
-	if got := round2(0.125); got != 0.13 {
-		t.Errorf("round2(0.125) = %v, want 0.13", got)
+func TestParseDecimal(t *testing.T) {
+	ok := map[string]string{
+		"":          "0",
+		"   ":       "0",
+		"12.5":      "12.5",
+		"1,234.56":  "1234.56",
+		"$50.00":    "50",
+		"  80.00  ": "80",
+		"-30.00":    "-30",
+		"€99.99":    "99.99",
 	}
-	if got := round2(-0.125); got != -0.13 {
-		t.Errorf("round2(-0.125) = %v, want -0.13", got)
+	for in, want := range ok {
+		got, err := parseDecimal(in)
+		if err != nil {
+			t.Errorf("parseDecimal(%q) unexpected error: %v", in, err)
+			continue
+		}
+		if got.Cmp(rat(want)) != 0 {
+			t.Errorf("parseDecimal(%q) = %s, want %s", in, got.RatString(), want)
+		}
 	}
-	moneyCases := map[float64]string{
-		72:      "72.00",
-		1234.56: "1234.56",
-		0:       "0.00",
-		1234.5:  "1234.50",
-		0.1:     "0.10",
-		-5:      "-5.00",
+	if _, err := parseDecimal("not-a-number"); err == nil {
+		t.Errorf("parseDecimal(\"not-a-number\") expected an error")
 	}
-	for in, want := range moneyCases {
-		if got := money(in).String(); got != want {
-			t.Errorf("money(%v) = %q, want %q", in, got, want)
+}
+
+// TestScaleToTenThousandths pins 02's per-charge scaling + round(4), in exact
+// rational arithmetic, returning integer ten-thousandths.
+func TestScaleToTenThousandths(t *testing.T) {
+	// 80 * 90/100 = 72.0000
+	if tt, ok := scaleToTenThousandths(rat("80"), rat("100"), rat("90")); tt != 720000 || !ok {
+		t.Errorf("scale(80,100,90) = (%d,%v), want (720000,true)", tt, ok)
+	}
+	// zero Partner Sale guard -> unscaled Partner Share, ok=false
+	if tt, ok := scaleToTenThousandths(rat("25"), rat("0"), rat("0")); tt != 250000 || ok {
+		t.Errorf("scale(25,0,0) = (%d,%v), want (250000,false)", tt, ok)
+	}
+	// 100 * 1/3 = 33.33333... -> round(4) -> 33.3333 -> 333333 ten-thousandths
+	if tt, ok := scaleToTenThousandths(rat("100"), rat("3"), rat("1")); tt != 333333 || !ok {
+		t.Errorf("scale(100,3,1) = (%d,%v), want (333333,true)", tt, ok)
+	}
+	// 12.345 * 1/1 -> 12.3450 -> 123450 (exact; no float drift)
+	if tt, ok := scaleToTenThousandths(rat("12.345"), rat("1"), rat("1")); tt != 123450 || !ok {
+		t.Errorf("scale(12.345,1,1) = (%d,%v), want (123450,true)", tt, ok)
+	}
+}
+
+func TestRatRoundTenThousandths(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int64
+	}{
+		{"12.345", 123450},
+		{"33.33333333", 333333},
+		{"0.12345", 1235}, // half away from zero rounds up
+		{"-0.12345", -1235},
+		{"0.00005", 1},
+		{"-0.00005", -1},
+		{"0", 0},
+	}
+	for _, c := range cases {
+		if got := ratRoundTenThousandths(rat(c.in)); got != c.want {
+			t.Errorf("ratRoundTenThousandths(%s) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}
+
+func TestTTToCentsAndMoney(t *testing.T) {
+	cents := map[int64]int64{
+		123450:  1235,  // 12.3450 -> 12.35 (half away up)
+		124900:  1249,  // 12.49 exact
+		999999:  10000, // 99.9999 -> 100.00
+		-123450: -1235,
+		50:      1, // 0.0050 -> 0.01
+		49:      0, // 0.0049 -> 0.00
+		-50:     -1,
+	}
+	for in, want := range cents {
+		if got := ttToCents(in); got != want {
+			t.Errorf("ttToCents(%d) = %d, want %d", in, got, want)
+		}
+	}
+	money := map[int64]string{
+		7200:   "72.00",
+		1235:   "12.35",
+		0:      "0.00",
+		123456: "1234.56",
+		5:      "0.05",
+		-500:   "-5.00",
+		10000:  "100.00",
+	}
+	for in, want := range money {
+		if got := moneyFromCents(in).String(); got != want {
+			t.Errorf("moneyFromCents(%d) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestBuildDescription(t *testing.T) {
 	cases := []struct {
-		sub, usage int
-		want       string
+		sub, usage, other int
+		want              string
 	}{
-		{3, 2, "3 Subscriptions + 2 Usage Records"},
-		{1, 0, "1 Subscription"},
-		{0, 4, "4 Usage Records"},
-		{2, 1, "2 Subscriptions + 1 Usage Record"},
-		{1, 1, "1 Subscription + 1 Usage Record"},
-		{2, 0, "2 Subscriptions"},
+		{3, 2, 0, "3 Subscriptions + 2 Usage Records"},
+		{1, 0, 0, "1 Subscription"},
+		{0, 4, 0, "4 Usage Records"},
+		{2, 1, 0, "2 Subscriptions + 1 Usage Record"},
+		{1, 1, 1, "1 Subscription + 1 Usage Record + 1 Other"},
+		{0, 0, 3, "3 Other"}, // "Other" is never pluralized
+		{0, 0, 1, "1 Other"},
+		{2, 0, 2, "2 Subscriptions + 2 Other"},
 	}
 	for _, c := range cases {
-		if got := buildDescription(c.sub, c.usage); got != c.want {
-			t.Errorf("buildDescription(%d,%d) = %q, want %q", c.sub, c.usage, got, c.want)
+		if got := buildDescription(c.sub, c.usage, c.other); got != c.want {
+			t.Errorf("buildDescription(%d,%d,%d) = %q, want %q", c.sub, c.usage, c.other, got, c.want)
 		}
 	}
 }
@@ -145,33 +228,6 @@ func TestBuildIdentifier(t *testing.T) {
 	got := buildIdentifier("loop-monthly", "LD-123", "2026-03", "USD")
 	if want := "loop-monthly-LD-123-2026-03-USD"; got != want {
 		t.Errorf("buildIdentifier = %q, want %q", got, want)
-	}
-}
-
-func TestIsSubscription(t *testing.T) {
-	sub := []string{"Subscription", "subscription plan", "Recurring application charge", "RECURRING"}
-	usage := []string{"Usage Charge", "usage", "One time", "Application charge", ""}
-	for _, s := range sub {
-		if !isSubscription(s) {
-			t.Errorf("isSubscription(%q) = false, want true", s)
-		}
-	}
-	for _, s := range usage {
-		if isSubscription(s) {
-			t.Errorf("isSubscription(%q) = true, want false", s)
-		}
-	}
-}
-
-func TestScaleAmount(t *testing.T) {
-	if amt, ok := scaleAmount(80, 100, 90); amt != 72 || !ok {
-		t.Errorf("scaleAmount(80,100,90) = (%v,%v), want (72,true)", amt, ok)
-	}
-	if amt, ok := scaleAmount(25, 0, 0); amt != 25 || ok {
-		t.Errorf("scaleAmount(25,0,0) = (%v,%v), want (25,false)", amt, ok)
-	}
-	if amt, ok := scaleAmount(100, 200, 200); amt != 100 || !ok {
-		t.Errorf("scaleAmount(100,200,200) = (%v,%v), want (100,true)", amt, ok)
 	}
 }
 
@@ -218,7 +274,7 @@ func TestResolvePrefix(t *testing.T) {
 
 func TestReduceCurrencyScaling(t *testing.T) {
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,80.00,100.00,90.00,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,80.00,100.00,90.00,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
 	if r.Amount.String() != "72.00" {
@@ -228,7 +284,7 @@ func TestReduceCurrencyScaling(t *testing.T) {
 
 func TestReduceZeroPartnerSaleGuard(t *testing.T) {
 	csv := testHeader +
-		"acme,C1,2026-01-20T00:00:00Z,Subscription,25.00,0,0,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-20T00:00:00Z,Recurring,25.00,0,0,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
 	if r.Amount.String() != "25.00" {
@@ -239,15 +295,37 @@ func TestReduceZeroPartnerSaleGuard(t *testing.T) {
 	}
 }
 
+// TestReduceDecimalExact proves round(4)-then-sum decimal exactness: a float
+// sum-then-round path would drift on repeating decimals and the 12.345 cent tie.
+func TestReduceDecimalExact(t *testing.T) {
+	// 3 x (100 * 1/3) = 3 x 33.3333 = 99.9999 -> 100.00
+	csv := testHeader +
+		"acme,gid://shopify/AppSubscription/1,2026-01-05T00:00:00Z,Recurring,100,3,1,USD\n" +
+		"acme,gid://shopify/AppSubscription/2,2026-01-06T00:00:00Z,Recurring,100,3,1,USD\n" +
+		"acme,gid://shopify/AppSubscription/3,2026-01-07T00:00:00Z,Recurring,100,3,1,USD\n"
+	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
+	if got := rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD").Amount.String(); got != "100.00" {
+		t.Errorf("repeating-decimal sum = %s, want 100.00", got)
+	}
+
+	// 12.345 -> 2dp half away from zero -> 12.35 (a float64 math.Round path gives 12.34).
+	csv2 := testHeader +
+		"acme,gid://shopify/AppSubscription/9,2026-02-05T00:00:00Z,Recurring,12.345,1,1,USD\n"
+	res2 := mustReduce(t, csv2, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
+	if got := rowByID(t, res2, "loop-monthly-LD-ACME-2026-02-USD").Amount.String(); got != "12.35" {
+		t.Errorf("cent tie = %s, want 12.35 (half away from zero, exact decimal)", got)
+	}
+}
+
 func TestReduceUsageOnlyFallback(t *testing.T) {
 	csv := testHeader +
-		"acme,U1,2026-07-05T00:00:00Z,Usage Charge,5,10,10,USD\n" +
-		"acme,U2,2026-07-15T00:00:00Z,Usage Charge,5,10,10,USD\n" +
-		"acme,U3,2026-07-09T00:00:00Z,Usage Charge,5,10,10,USD\n"
+		"acme,gid://shopify/AppUsageRecord/1,2026-07-05T00:00:00Z,Usage,5,10,10,USD\n" +
+		"acme,gid://shopify/AppUsageRecord/2,2026-07-15T00:00:00Z,Usage,5,10,10,USD\n" +
+		"acme,gid://shopify/AppUsageRecord/3,2026-07-09T00:00:00Z,Usage,5,10,10,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-07-USD")
 	if r.RevenueDate != "2026-07-15" {
-		t.Errorf("usage-only revenue_date = %s, want 2026-07-15 (latest charge)", r.RevenueDate)
+		t.Errorf("usage-only revenue_date = %s, want 2026-07-15 (latest of all charges)", r.RevenueDate)
 	}
 	if r.Description != "3 Usage Records" {
 		t.Errorf("description = %q, want %q", r.Description, "3 Usage Records")
@@ -256,9 +334,9 @@ func TestReduceUsageOnlyFallback(t *testing.T) {
 
 func TestReduceMultiSubscriptionLatestWins(t *testing.T) {
 	csv := testHeader +
-		"acme,S1,2026-06-03T00:00:00Z,Subscription,10,10,10,USD\n" +
-		"acme,S2,2026-06-20T00:00:00Z,Subscription,10,10,10,USD\n" +
-		"acme,U1,2026-06-30T00:00:00Z,Usage Charge,5,10,10,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-06-03T00:00:00Z,Recurring,10,10,10,USD\n" +
+		"acme,gid://shopify/AppSubscription/2,2026-06-20T00:00:00Z,Recurring,10,10,10,USD\n" +
+		"acme,gid://shopify/AppUsageRecord/3,2026-06-30T00:00:00Z,Usage,5,10,10,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-06-USD")
 	if r.RevenueDate != "2026-06-20" {
@@ -272,10 +350,88 @@ func TestReduceMultiSubscriptionLatestWins(t *testing.T) {
 	}
 }
 
+// TestReduceOtherCategory covers the third category and proves the
+// subscription-anchored revenue_date wins even when a later "other" charge
+// exists in the same month.
+func TestReduceOtherCategory(t *testing.T) {
+	csv := testHeader +
+		"acme,gid://shopify/AppSubscription/1,2026-08-05T00:00:00Z,Recurring,10,10,10,USD\n" +
+		"acme,gid://shopify/AppUsageRecord/2,2026-08-10T00:00:00Z,Usage,5,10,10,USD\n" +
+		"acme,gid://shopify/AppOneTimeSale/3,2026-08-20T00:00:00Z,OneTime,7,10,10,USD\n"
+	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
+	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-08-USD")
+	if r.Description != "1 Subscription + 1 Usage Record + 1 Other" {
+		t.Errorf("description = %q, want %q", r.Description, "1 Subscription + 1 Usage Record + 1 Other")
+	}
+	if r.RevenueDate != "2026-08-05" {
+		t.Errorf("revenue_date = %s, want 2026-08-05 (subscription anchor, not the later Other charge)", r.RevenueDate)
+	}
+	if r.Amount.String() != "22.00" {
+		t.Errorf("amount = %s, want 22.00", r.Amount.String())
+	}
+	if res.Preview.SubscriptionCount != 1 || res.Preview.UsageRecordCount != 1 || res.Preview.OtherCount != 1 {
+		t.Errorf("category counts = sub %d usage %d other %d, want 1/1/1",
+			res.Preview.SubscriptionCount, res.Preview.UsageRecordCount, res.Preview.OtherCount)
+	}
+}
+
+// TestReduceClassificationUsesGIDNotChargeType proves the diagnostic Charge Type
+// column is ignored: every row here has a misleading Charge Type, yet the GID
+// drives classification, description, and the subscription-anchored date.
+func TestReduceClassificationUsesGIDNotChargeType(t *testing.T) {
+	csv := testHeader +
+		"acme,gid://shopify/AppUsageRecord/1,2026-01-10T00:00:00Z,Subscription,10,10,10,USD\n" + // type lies "Subscription"
+		"acme,gid://shopify/AppSubscription/2,2026-01-15T00:00:00Z,Usage Charge,10,10,10,USD\n" + // type lies "Usage"
+		"acme,gid://shopify/AppOneTimeSale/3,2026-01-20T00:00:00Z,Subscription,10,10,10,USD\n" // type lies "Subscription"
+	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
+	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
+	if r.Description != "1 Subscription + 1 Usage Record + 1 Other" {
+		t.Errorf("description = %q, want %q (GID classification, not Charge Type)", r.Description, "1 Subscription + 1 Usage Record + 1 Other")
+	}
+	if r.RevenueDate != "2026-01-15" {
+		t.Errorf("revenue_date = %s, want 2026-01-15 (the only AppSubscription GID)", r.RevenueDate)
+	}
+}
+
+// TestReduceSkipAndCountBadRows proves a single malformed data row is
+// skip-and-counted (never fatal): the run succeeds (nil error), the good row is
+// the only aggregate row, and each skip reason is counted.
+func TestReduceSkipAndCountBadRows(t *testing.T) {
+	csv := testHeader +
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,USD\n" + // good
+		"acme,,2026-01-16T00:00:00Z,Recurring,10,10,10,USD\n" + // empty Charge ID
+		"acme,gid://shopify/AppSubscription/3,2026-01-17T00:00:00Z,Recurring,,10,10,USD\n" + // blank Partner Share
+		"acme,gid://shopify/AppSubscription/4,2026-01-18T00:00:00Z,Recurring,not-money,10,10,USD\n" + // non-numeric Partner Share
+		"acme,gid://shopify/AppUsageRecord/5,not-a-date,Usage,10,10,10,USD\n" // unparseable Charge Creation Time
+	res, err := reduce(strings.NewReader(csv), safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
+	if err != nil {
+		t.Fatalf("a malformed data row must not abort the run; got error: %v", err)
+	}
+	p := res.Preview
+	if p.RowsRead != 5 {
+		t.Errorf("rows_read = %d, want 5", p.RowsRead)
+	}
+	if p.SkippedNoChargeID != 1 {
+		t.Errorf("skipped_no_charge_id = %d, want 1", p.SkippedNoChargeID)
+	}
+	if p.SkippedBlankAmount != 2 {
+		t.Errorf("skipped_blank_amount = %d, want 2 (blank + non-numeric Partner Share)", p.SkippedBlankAmount)
+	}
+	if p.SkippedNoRecordAt != 1 {
+		t.Errorf("skipped_no_recorded_at = %d, want 1", p.SkippedNoRecordAt)
+	}
+	if p.MatchedRows != 1 || len(res.Rows) != 1 {
+		t.Errorf("matched_rows = %d, aggregate rows = %d, want 1 and 1", p.MatchedRows, len(res.Rows))
+	}
+	if got := rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD").Amount.String(); got != "10.00" {
+		t.Errorf("surviving amount = %s, want 10.00", got)
+	}
+}
+
 func TestReduceUnmatchedShopWorklistNotAggregate(t *testing.T) {
 	csv := testHeader +
-		"ghost.myshopify.com,G1,2026-01-12T00:00:00Z,Subscription,40,100,100,USD\n" +
-		"ghost,G2,2026-02-02T00:00:00Z,Usage Charge,15,100,100,USD\n"
+		"ghost.myshopify.com,gid://shopify/AppSubscription/1,2026-01-12T00:00:00Z,Recurring,40,100,100,USD\n" +
+		"ghost,gid://shopify/AppUsageRecord/2,2026-02-02T00:00:00Z,Usage,15,100,100,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	if len(res.Rows) != 0 {
 		t.Fatalf("expected no aggregate rows for unmatched shops, got %d", len(res.Rows))
@@ -287,8 +443,8 @@ func TestReduceUnmatchedShopWorklistNotAggregate(t *testing.T) {
 	if u.Subdomain != "ghost" || u.FirstMonth != "2026-01" || u.LastMonth != "2026-02" || u.RowCount != 2 {
 		t.Errorf("unmatched worklist = %+v", u)
 	}
-	if round2(u.TotalAmount) != 55.00 {
-		t.Errorf("unmatched total = %v, want 55.00", u.TotalAmount)
+	if u.TotalTenThousandths != 550000 {
+		t.Errorf("unmatched total = %d ten-thousandths, want 550000 (55.0000)", u.TotalTenThousandths)
 	}
 	if res.Preview.UnmatchedRows != 2 || res.Preview.UnmatchedShops != 1 {
 		t.Errorf("preview unmatched counts = rows %d shops %d", res.Preview.UnmatchedRows, res.Preview.UnmatchedShops)
@@ -303,8 +459,8 @@ func TestReduceMyshopifyStrippedBothSides(t *testing.T) {
 		Store{Subdomain: "acme", LeadSlug: "LD-ACME"},
 	)
 	csv := testHeader +
-		"Chestnuts,C1,2026-01-03T00:00:00Z,Subscription,10,10,10,USD\n" +
-		"acme.myshopify.com,A1,2026-01-04T00:00:00Z,Subscription,20,10,10,USD\n"
+		"Chestnuts,gid://shopify/AppSubscription/1,2026-01-03T00:00:00Z,Recurring,10,10,10,USD\n" +
+		"acme.myshopify.com,gid://shopify/AppSubscription/2,2026-01-04T00:00:00Z,Recurring,20,10,10,USD\n"
 	res := mustReduce(t, csv, sm, "loop-monthly")
 	rowByID(t, res, "loop-monthly-LD-CHEST-2026-01-USD")
 	rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
@@ -315,7 +471,7 @@ func TestReduceMyshopifyStrippedBothSides(t *testing.T) {
 
 func TestReducePrefixFlagOverride(t *testing.T) {
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,10,10,10,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "acme-monthly")
 	rowByID(t, res, "acme-monthly-LD-ACME-2026-01-USD")
 	if res.Preview.Prefix != "acme-monthly" {
@@ -327,8 +483,8 @@ func TestReduceNewEstimate(t *testing.T) {
 	sm := safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"})
 	sm.ExistingExternalIDs = []string{"loop-monthly-LD-ACME-2026-01-USD"}
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,10,10,10,USD\n" + // existing
-		"acme,C2,2026-02-15T00:00:00Z,Subscription,10,10,10,USD\n" // new
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,USD\n" + // existing
+		"acme,gid://shopify/AppSubscription/2,2026-02-15T00:00:00Z,Recurring,10,10,10,USD\n" // new
 	res := mustReduce(t, csv, sm, "loop-monthly")
 	if res.Preview.NewEstimate == nil {
 		t.Fatal("new_estimate should not be nil when inventory is complete")
@@ -342,7 +498,7 @@ func TestReduceTruncatedInventory(t *testing.T) {
 	sm := safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"})
 	sm.ExistingExternalIDsTruncated = true
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,10,10,10,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,USD\n"
 	res := mustReduce(t, csv, sm, "loop-monthly")
 	if res.Preview.NewEstimate != nil {
 		t.Errorf("new_estimate = %v, want nil when truncated", *res.Preview.NewEstimate)
@@ -354,7 +510,7 @@ func TestReduceTruncatedInventory(t *testing.T) {
 
 func TestReduceGuardrailSafeUnsafeAndMissing(t *testing.T) {
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,10,10,10,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,USD\n"
 
 	safe := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	if !safe.Preview.Guardrail.SettledUploadSafe || safe.Preview.Guardrail.Warning != "" {
@@ -377,20 +533,10 @@ func TestReduceGuardrailSafeUnsafeAndMissing(t *testing.T) {
 	}
 }
 
-func TestReduceRecurringClassifiedAsSubscription(t *testing.T) {
-	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Recurring application charge,10,10,10,USD\n"
-	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
-	r := rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
-	if r.Description != "1 Subscription" {
-		t.Errorf("Recurring application charge classified as %q, want subscription", r.Description)
-	}
-}
-
 func TestReduceMultiCurrencySplits(t *testing.T) {
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,10,10,10,USD\n" +
-		"acme,C2,2026-01-16T00:00:00Z,Subscription,10,10,10,EUR\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,USD\n" +
+		"acme,gid://shopify/AppSubscription/2,2026-01-16T00:00:00Z,Recurring,10,10,10,EUR\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
 	rowByID(t, res, "loop-monthly-LD-ACME-2026-01-EUR")
@@ -400,25 +546,28 @@ func TestReduceMultiCurrencySplits(t *testing.T) {
 }
 
 func TestReduceMissingColumns(t *testing.T) {
-	// Missing Partner Share, no shop-domain candidate, and no charge-type
-	// candidate. The error must name each missing column (the multi-candidate
-	// ones with their candidate list).
-	header := "Charge ID,Charge Creation Time,Partner Sale,Partner Sale In Payout Currency\n"
+	// Missing Shop, Charge Creation Time, and Partner Share. The error must name
+	// each missing required column. Charge Type is NOT required (diagnostic-only).
+	header := "Charge ID,Partner Sale,Partner Sale In Payout Currency,Payout Currency\n"
 	_, err := reduce(strings.NewReader(header), safeMap(), "loop-monthly")
 	if err == nil {
 		t.Fatal("expected a missing-column error")
 	}
-	for _, want := range []string{"Partner Share", "shop domain (one of:", "charge type (one of:"} {
+	for _, want := range []string{"Shop", "Charge Creation Time", "Partner Share"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err.Error(), want)
 		}
 	}
+	if strings.Contains(err.Error(), "Charge Type") {
+		t.Errorf("error %q must NOT require Charge Type (it is diagnostic-only)", err.Error())
+	}
 }
 
 func TestReduceCurrencyColumnAbsentAssumesUSD(t *testing.T) {
-	header := "Shop,Charge ID,Charge Creation Time,Type,Partner Share,Partner Sale,Partner Sale In Payout Currency\n"
+	// No Payout Currency and no Charge Type column (Charge Type is not required).
+	header := "Shop,Charge ID,Charge Creation Time,Partner Share,Partner Sale,Partner Sale In Payout Currency\n"
 	csv := header +
-		"acme,C1,2026-01-15T00:00:00Z,Subscription,10,10,10\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,10,10,10\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
 	if !hasWarning(res, "assumed USD") {
@@ -426,11 +575,23 @@ func TestReduceCurrencyColumnAbsentAssumesUSD(t *testing.T) {
 	}
 }
 
-func TestReduceQuotedEmbeddedNewline(t *testing.T) {
-	// A quoted field containing an embedded newline and comma must parse as a
-	// single record (encoding/csv handles it natively).
+func TestReduceBlankCurrencyDefaultsUSD(t *testing.T) {
+	// Payout Currency column present but a value is blank -> USD + a warning.
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,\"Usage,\nCharge\",5,10,10,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,Recurring,10,10,10,\n"
+	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
+	rowByID(t, res, "loop-monthly-LD-ACME-2026-01-USD")
+	if !hasWarning(res, "blank Payout Currency") {
+		t.Errorf("expected a blank-currency warning, got %v", res.Preview.Warnings)
+	}
+}
+
+func TestReduceQuotedEmbeddedNewline(t *testing.T) {
+	// A quoted Charge Type field containing an embedded newline and comma must
+	// parse as a single record (encoding/csv handles it natively); classification
+	// still comes from the GID.
+	csv := testHeader +
+		"acme,gid://shopify/AppUsageRecord/1,2026-01-15T00:00:00Z,\"Usage,\nCharge\",5,10,10,USD\n"
 	res := mustReduce(t, csv, safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"}), "loop-monthly")
 	if res.Preview.RowsRead != 1 {
 		t.Fatalf("rows_read = %d, want 1 (embedded newline must not split the record)", res.Preview.RowsRead)
@@ -462,8 +623,8 @@ func (r *oneByteReader) Read(p []byte) (int, error) {
 
 func TestReduceChunkedReaderMatchesWholeRead(t *testing.T) {
 	csv := testHeader +
-		"acme,C1,2026-01-15T00:00:00Z,\"Sub\nscription\",80.00,100.00,90.00,USD\n" +
-		"acme,C2,2026-01-20T00:00:00Z,Usage Charge,10,10,10,USD\n"
+		"acme,gid://shopify/AppSubscription/1,2026-01-15T00:00:00Z,\"Sub\nscription\",80.00,100.00,90.00,USD\n" +
+		"acme,gid://shopify/AppUsageRecord/2,2026-01-20T00:00:00Z,Usage Charge,10,10,10,USD\n"
 	sm := safeMap(Store{Subdomain: "acme", LeadSlug: "LD-ACME"})
 
 	whole, err := reduce(strings.NewReader(csv), sm, "loop-monthly")
@@ -508,7 +669,7 @@ func TestConstantMemory(t *testing.T) {
 		_, _ = io.WriteString(w, testHeader)
 		for i := 0; i < rows; i++ {
 			day := i%28 + 1
-			fmt.Fprintf(w, "shop%d,C%d,2026-05-%02dT00:00:00Z,Subscription,1.00,1.00,1.00,USD\n", i%leads, i, day)
+			fmt.Fprintf(w, "shop%d,gid://shopify/AppSubscription/%d,2026-05-%02dT00:00:00Z,Recurring,1.00,1.00,1.00,USD\n", i%leads, i, day)
 		}
 		_ = w.Flush()
 		_ = pw.Close()
@@ -534,7 +695,7 @@ func TestConstantMemory(t *testing.T) {
 		t.Fatalf("aggregate rows = %d, want %d (bounded by leads x months x currencies)", len(res.Rows), leads)
 	}
 	// Output equals the analytic baseline: each lead summed rows/leads * $1.00.
-	wantPerLead := money(float64(rows / leads)).String()
+	wantPerLead := moneyFromCents(int64(rows/leads) * 100).String()
 	for _, r := range res.Rows {
 		if r.Amount.String() != wantPerLead {
 			t.Fatalf("lead %s amount = %s, want %s", r.LeadSlug, r.Amount.String(), wantPerLead)
