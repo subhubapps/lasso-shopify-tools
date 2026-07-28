@@ -2,14 +2,14 @@
   "name": "lasso-shopify-tools",
   "owner": {
     "name": "Lasso",
-    "email": "engineering@lassotech.com"
+    "email": "support@onelasso.com"
   },
-  "description": "Lasso Shopify payout upload tools: a local, constant-memory CSV reducer plus a Claude Code plugin that batches settled revenue into Lasso.",
+  "description": "Process your Shopify Partner earnings file on your own computer and upload the relevant partner revenue to Lasso.",
   "plugins": [
     {
       "name": "lasso-shopify-payout",
       "source": "./plugin",
-      "description": "Reduce a multi-GB Shopify Partner earnings CSV locally, then upload settled payout revenue to Lasso in reviewed, explicitly approved batches."
+      "description": "Turn your Shopify Partner earnings file into partner revenue in Lasso. The file is processed on your own computer and never uploaded. You see a preview of the amounts and approve them before anything is sent."
     }
   ]
 }

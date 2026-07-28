@@ -2,12 +2,19 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "lasso-shopify-payout",
   "version": "0.1.0",
-  "description": "Reduce a multi-GB Shopify Partner earnings CSV locally, then upload settled payout revenue to Lasso in reviewed, explicitly approved batches.",
+  "description": "Turn your Shopify Partner earnings file into partner revenue in Lasso. The file is processed on your own computer and never uploaded. You see a preview of the amounts and approve them before anything is sent.",
   "author": {
     "name": "Lasso",
-    "email": "engineering@lassotech.com"
+    "email": "support@onelasso.com"
   },
   "homepage": "https://github.com/subhubapps/lasso-shopify-tools",
   "repository": "https://github.com/subhubapps/lasso-shopify-tools",
-  "keywords": ["lasso", "shopify", "payouts", "revenue", "mcp"]
+  "keywords": [
+    "lasso",
+    "shopify",
+    "payouts",
+    "revenue",
+    "earnings",
+    "reconciliation"
+  ]
 }

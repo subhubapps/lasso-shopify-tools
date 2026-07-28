@@ -1,5 +1,5 @@
 ---
-description: Reduce a Shopify Partner earnings CSV locally and upload settled payout revenue to Lasso in reviewed, approved batches.
+description: Process your Shopify Partner earnings file on your own computer, preview the partner revenue it found, and upload it to Lasso once you approve.
 argument-hint: <path-to-earnings.csv>
 ---
 
@@ -14,7 +14,7 @@ Follow the skill's procedure exactly and without shortcuts. In particular:
   `aggregate.jsonl` rows travel to Lasso.
 - Enforce the guardrail: if `account_shopify_store_map` reports
   `revenueModeSignal.settledUploadSafe = false`, warn the user, cite the
-  "disable Shopify API revenue sync" prerequisite, and REFUSE every `commit`
+  "Shopify API revenue sync" prerequisite in the README, and REFUSE every `commit`
   call for the rest of the session (reduce, preview, and `dry_run` are still
   allowed).
 - Never issue a `commit` without explicit user approval given after the preview.

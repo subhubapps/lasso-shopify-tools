@@ -1,12 +1,12 @@
 ---
 name: payout-upload
 description: >-
-  Upload settled Shopify payout revenue to Lasso from a Shopify Partner
-  "Earnings" CSV. Use when a user wants to reconcile, import, or upload Shopify
-  Partner payout/earnings revenue into Lasso, or runs
-  /lasso-shopify-payout-upload. Reduces the multi-GB CSV locally with the bundled
-  `reducer` binary, previews, then uploads reduced aggregate rows in reviewed,
-  explicitly approved batches. The raw CSV never leaves the machine.
+  Upload settled Shopify Partner payout revenue to Lasso from the Shopify
+  Partner "Earnings" file (a CSV export). Use when a user wants to reconcile,
+  import, or upload a Shopify Partner earnings or payout CSV into Lasso, or runs
+  /lasso-shopify-payout-upload. Processes the earnings file on the user's own
+  computer, shows a preview of the amounts, and uploads only the relevant rows
+  after the user approves. The earnings file itself never leaves the computer.
 ---
 
 # Shopify payout upload
@@ -27,8 +27,8 @@ MCP tool.
 The account's **Shopify API revenue sync must be disabled** before the first
 upload, or Lasso would double-count settled revenue against the API-synced
 revenue. The server enforces this (it rejects `commit` while sync is active) and
-so does this skill. See the README section "Prerequisite: disable Shopify API
-revenue sync". The store map's `revenueModeSignal.settledUploadSafe` is the
+so does this skill. See the README section "Before your first upload: turn off automatic Shopify revenue sync"
+(the Lasso setting is named "Shopify API revenue sync"). The store map's `revenueModeSignal.settledUploadSafe` is the
 signal for whether this has been done.
 
 ## MCP tools (bundled Lasso remote MCP; OAuth via `/mcp`)
@@ -96,7 +96,7 @@ Read `revenueModeSignal.settledUploadSafe` from the store map.
 
 - If it is `false` (or missing/null): the account is **not safe** - Shopify API
   revenue sync is still active. Warn the user clearly, cite the prerequisite
-  ("disable Shopify API revenue sync" in the README), and mark this session
+  ("Shopify API revenue sync", see the README prerequisite section), and mark this session
   **commit-refused**. You MAY still reduce, preview, and run `dry_run` (which
   writes nothing), but you MUST refuse every `commit` for the rest of the
   session, exactly as the server would.

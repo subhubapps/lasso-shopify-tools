@@ -1,37 +1,46 @@
 # lasso-shopify-tools
 
-Reconcile settled **Shopify Partner payout** revenue into Lasso from the Shopify
-Partner "Earnings" CSV, without the multi-GB file ever leaving your machine.
+Turn your Shopify Partner earnings file into partner revenue in Lasso.
 
-This repo ships two things, versioned together by one git tag:
+You download the "Earnings" file from your Shopify Partner account, point this
+tool at it, review a preview of what would be uploaded, and approve it. The
+earnings file is processed on your own computer and is never uploaded anywhere.
+Only the partner revenue rows that Lasso needs are sent.
 
-- **`reducer/`** - a zero-dependency, constant-memory Go CLI that streams the
-  earnings CSV locally and emits a tiny neutral aggregate.
-- **`plugin/`** - a Claude Code plugin (`lasso-shopify-payout`) that wraps the
-  whole flow in one command: fetch the store map, guardrail, reduce, preview,
-  explicit approval, batched upload, follow-up worklist. It bundles the hosted
-  Lasso remote MCP server, so the upload tools arrive with the plugin.
+You get two pieces, released together so they always match:
+
+- **A small program that runs on your computer.** It reads the earnings file,
+  works out how much revenue belongs to each partner for each month, and writes
+  a short summary. The earnings file itself stays on your machine.
+- **A Claude Code plugin** (`lasso-shopify-payout`) that walks you through the
+  whole thing in one command: it looks up your partner and store list, confirms
+  the account is ready, builds the summary, shows you the totals, waits for your
+  approval, uploads, and then hands you a short list of anything it could not
+  match to a partner. The connection to Lasso comes with the plugin, so there is
+  nothing extra to set up.
 
 ---
 
-## Prerequisite: disable Shopify API revenue sync (do this first)
+## Before your first upload: turn off automatic Shopify revenue sync
 
-**Before your first upload, disable the account's Shopify API revenue sync in
-Lasso.** Settled payout upload and API revenue sync are two views of the same
-money; running both double-counts revenue. This is a one-time, per-account
-change.
+**If Lasso is already pulling Shopify revenue for this account automatically,
+turn that off before you upload for the first time.** The automatic sync and
+this upload describe the same money, so leaving both on would count your revenue
+twice. It is a one-time change per account.
 
-The safety is enforced in three places:
+In Lasso this setting is called **Shopify API revenue sync**, under Integrations
+then Shopify then Configure Sync Settings. That is the name to look for.
 
-1. The Lasso server rejects any `commit` while API revenue sync is still active.
-2. The `reducer` prints a prominent warning and flags `preview.json` when the
-   account is not safe.
-3. The plugin **refuses every commit** for the session when the store map
-   reports `revenueModeSignal.settledUploadSafe = false` (reduce, preview, and
-   `dry_run` still work, so you can rehearse safely).
+Three separate checks protect you here:
 
-If a guardrail refuses your commit, come back to this section: it means Shopify
-API revenue sync has not been disabled for the account yet.
+1. Lasso refuses the upload while automatic Shopify revenue sync is still on.
+2. The preview says plainly, and prominently, when the account is not ready.
+3. The plugin blocks every upload for the rest of the session when the account
+   is not ready. You can still build the summary and look at the preview, so you
+   can rehearse the run safely.
+
+If your upload gets refused, come back to this section: it means automatic
+Shopify revenue sync has not been turned off for the account yet.
 
 ---
 
@@ -51,7 +60,7 @@ Run these inside Claude Code:
    /plugin install lasso-shopify-payout@lasso-shopify-tools
    ```
 
-3. Authenticate the bundled Lasso MCP server (one-time OAuth in your browser):
+3. Connect to Lasso. This signs you in once, in your browser:
 
    ```
    /mcp
@@ -69,14 +78,24 @@ Run these inside Claude Code:
 > Claude to "upload my Shopify payout CSV at <path>" and it will invoke the same
 > `payout-upload` skill.
 
-On first run the plugin fetches the platform-matched `reducer` binary from this
-repo's GitHub Release, verifies its SHA256, and caches it under
-`~/.cache/lasso-shopify-tools/<version>/`. Later runs reuse the cache with no
-network.
+The first run downloads a small helper program and checks it is genuine before
+using it. Later runs reuse it and work offline.
+
+## Your earnings file stays on your computer
+
+The earnings file can be several gigabytes, and it never leaves your machine.
+The helper program reads it locally and works out, for each partner and each
+month, how much revenue belongs to them. Only that short summary is sent to
+Lasso, and only after you have seen the totals and approved them.
 
 ---
 
-## What happens in a run
+## Technical reference (for developers)
+
+Everything below this line is implementation detail. You do not need it to run
+an upload.
+
+### What happens in a run
 
 1. **Store map.** Calls `account_shopify_store_map` and saves the raw JSON to
    `map.json` (the reducer's input).
@@ -100,7 +119,7 @@ network.
 
 ---
 
-## Your data stays on your machine
+### Your data stays on your machine
 
 The Shopify Partner earnings CSV is often several GB. It is read **only** by the
 local `reducer` binary, in a single streaming pass with memory bounded by the
@@ -120,7 +139,7 @@ form
 
 ---
 
-## Hosted MCP endpoint (prod vs pre-prod)
+### Hosted MCP endpoint (prod vs pre-prod)
 
 The plugin ships pointed at **production**:
 
@@ -140,7 +159,7 @@ always completed by you via `/mcp`; no tokens are stored in the repo.
 
 ---
 
-## Distribution, releases, and the binary trust boundary
+### Distribution, releases, and the binary trust boundary
 
 - **One tag versions everything.** The reducer binary, `plugin/.claude-plugin/
   plugin.json`'s `version`, and the marketplace entry move together. The release
@@ -179,7 +198,7 @@ always completed by you via `/mcp`; no tokens are stored in the repo.
 
 ---
 
-## Repository layout
+### Repository layout
 
 ```
 lasso-shopify-tools/
@@ -197,7 +216,7 @@ lasso-shopify-tools/
   .goreleaser.yaml
 ```
 
-## Development
+### Development
 
 ```sh
 cd reducer
