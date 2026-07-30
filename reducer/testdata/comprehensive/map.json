@@ -1,0 +1,13 @@
+{
+  "stores": [
+    { "subdomain": "chestnuts.myshopify.com", "leadSlug": "LD-CHEST", "aasmState": "closed_won" },
+    { "subdomain": "acme", "leadSlug": "LD-ACME", "aasmState": "closed_won" },
+    { "subdomain": "usageonly", "leadSlug": "LD-USE", "aasmState": "active" },
+    { "subdomain": "penny", "leadSlug": "LD-PENNY", "aasmState": "closed_won" },
+    { "subdomain": "thirds", "leadSlug": "LD-THIRD", "aasmState": "closed_won" }
+  ],
+  "existingExternalIds": ["loop-monthly-LD-ACME-2026-01-USD"],
+  "existingExternalIdsTruncated": false,
+  "importPrefix": "loop-monthly",
+  "revenueModeSignal": { "mode": null, "apiRevenueSyncDisabled": true, "settledUploadSafe": true }
+}

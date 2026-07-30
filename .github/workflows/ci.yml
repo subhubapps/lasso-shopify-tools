@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  reducer:
+    name: reducer (gofmt, vet, test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: reducer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: reducer/go.mod
+          cache: false   # stdlib-only module: no go.sum, nothing to cache
+
+      - name: gofmt (fail on any unformatted file)
+        run: |
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            echo "These files are not gofmt-clean:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./...
+
+  manifests:
+    name: validate plugin/marketplace/mcp JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse and sanity-check the JSON manifests
+        run: |
+          python3 - <<'PY'
+          import json, sys
+
+          def load(path):
+              with open(path) as f:
+                  return json.load(f)
+
+          errors = []
+
+          plugin = load("plugin/.claude-plugin/plugin.json")
+          if plugin.get("name") != "lasso-shopify-payout":
+              errors.append("plugin.json name must be 'lasso-shopify-payout'")
+          if not plugin.get("version"):
+              errors.append("plugin.json must declare a version")
+
+          mcp = load("plugin/.mcp.json")
+          lasso = mcp.get("mcpServers", {}).get("lasso", {})
+          if lasso.get("type") != "http":
+              errors.append(".mcp.json lasso server must be type 'http'")
+          if not str(lasso.get("url", "")).startswith("https://"):
+              errors.append(".mcp.json lasso url must be https")
+
+          mkt = load(".claude-plugin/marketplace.json")
+          if mkt.get("name") != "lasso-shopify-tools":
+              errors.append("marketplace.json name must be 'lasso-shopify-tools'")
+          if not isinstance(mkt.get("owner", {}).get("name"), str):
+              errors.append("marketplace.json owner.name is required")
+          entries = mkt.get("plugins", [])
+          if not entries:
+              errors.append("marketplace.json must list at least one plugin")
+          else:
+              src = entries[0].get("source")
+              if not (isinstance(src, str) and src.startswith("./")):
+                  errors.append("marketplace.json plugins[0].source must be a './' relative path")
+              if entries[0].get("name") != plugin.get("name"):
+                  errors.append("marketplace entry name must match plugin.json name")
+
+          if errors:
+              print("Manifest validation failed:")
+              for e in errors:
+                  print("  -", e)
+              sys.exit(1)
+          print("All manifests parsed and passed sanity checks.")
+          PY

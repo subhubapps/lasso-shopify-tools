@@ -1,0 +1,15 @@
+{
+  "name": "lasso-shopify-tools",
+  "owner": {
+    "name": "Lasso",
+    "email": "support@onelasso.com"
+  },
+  "description": "Process your Shopify Partner earnings file on your own computer and upload the relevant partner revenue to Lasso.",
+  "plugins": [
+    {
+      "name": "lasso-shopify-payout",
+      "source": "./plugin",
+      "description": "Turn your Shopify Partner earnings file into partner revenue in Lasso. The file is processed on your own computer and never uploaded. You see a preview of the amounts and approve them before anything is sent."
+    }
+  ]
+}

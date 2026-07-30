@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "lasso": {
+      "type": "http",
+      "url": "https://api.lassotech.com/api/v1/mcp"
+    }
+  }
+}

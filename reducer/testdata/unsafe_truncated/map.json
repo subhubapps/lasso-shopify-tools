@@ -1,0 +1,9 @@
+{
+  "stores": [
+    { "subdomain": "acme.myshopify.com", "leadSlug": "LD-ACME", "aasmState": "closed_won" }
+  ],
+  "existingExternalIds": [],
+  "existingExternalIdsTruncated": true,
+  "importPrefix": "loop-monthly",
+  "revenueModeSignal": { "mode": null, "apiRevenueSyncDisabled": false, "settledUploadSafe": false }
+}

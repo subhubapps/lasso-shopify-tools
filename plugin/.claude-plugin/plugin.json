@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "lasso-shopify-payout",
+  "version": "0.1.0",
+  "description": "Turn your Shopify Partner earnings file into partner revenue in Lasso. The file is processed on your own computer and never uploaded. You see a preview of the amounts and approve them before anything is sent.",
+  "author": {
+    "name": "Lasso",
+    "email": "support@onelasso.com"
+  },
+  "homepage": "https://github.com/subhubapps/lasso-shopify-tools",
+  "repository": "https://github.com/subhubapps/lasso-shopify-tools",
+  "keywords": [
+    "lasso",
+    "shopify",
+    "payouts",
+    "revenue",
+    "earnings",
+    "reconciliation"
+  ]
+}

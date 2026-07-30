@@ -1,0 +1,9 @@
+{
+  "stores": [
+    { "subdomain": "acme", "leadSlug": "LD-ACME", "aasmState": "closed_won" }
+  ],
+  "existingExternalIds": [],
+  "existingExternalIdsTruncated": false,
+  "importPrefix": "",
+  "revenueModeSignal": { "mode": null, "apiRevenueSyncDisabled": true, "settledUploadSafe": true }
+}

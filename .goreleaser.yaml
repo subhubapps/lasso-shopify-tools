@@ -1,0 +1,57 @@
+# goreleaser config for lasso-shopify-tools.
+# Builds the Go `reducer` (module lives in ./reducer) as static CGO-free
+# binaries for 5 targets and publishes them as RAW binaries plus a SHA256SUMS
+# checksum file on the GitHub Release for the pushed tag.
+#
+# Asset-name scheme (consumed verbatim by plugin/scripts/fetch-reducer.*):
+#   reducer_<os>_<arch>        for darwin/linux
+#   reducer_windows_amd64.exe  (goreleaser appends .exe for windows binaries)
+#   SHA256SUMS
+# where <os> is the GOOS (darwin|linux|windows) and <arch> is the GOARCH
+# (amd64|arm64). Keep these in lockstep with the fetch scripts.
+version: 2
+
+project_name: lasso-shopify-tools
+
+builds:
+  - id: reducer
+    dir: reducer            # the Go module is in the reducer/ subdirectory
+    main: .                 # main package at the module root (reducer/main.go)
+    binary: reducer
+    env:
+      - CGO_ENABLED=0       # fully static, no cgo
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # 5-target matrix = {darwin,linux}x{amd64,arm64} + windows/amd64.
+      - goos: windows
+        goarch: arm64
+
+archives:
+  - id: reducer
+    formats:
+      - binary              # publish the raw binary, not a tar.gz/zip
+    # Produces: reducer_darwin_arm64, reducer_darwin_amd64, reducer_linux_amd64,
+    # reducer_linux_arm64, reducer_windows_amd64(.exe appended by goreleaser).
+    name_template: "reducer_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "SHA256SUMS"
+  algorithm: sha256
+
+changelog:
+  disable: true
+
+release:
+  draft: false
+  prerelease: auto        # v0.1.0 publishes as a full release

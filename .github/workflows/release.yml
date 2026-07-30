@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write   # goreleaser needs to create the GitHub Release + upload assets
+
+jobs:
+  release:
+    name: test, lockstep check, goreleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # goreleaser needs full history/tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: reducer/go.mod
+          cache: false   # stdlib-only module: no go.sum, nothing to cache
+
+      - name: reducer tests
+        working-directory: reducer
+        run: go test ./...
+
+      - name: version lockstep check (tag == v<plugin.json version>)
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          plugin_version="$(jq -r .version plugin/.claude-plugin/plugin.json)"
+          expected="v${plugin_version}"
+          echo "tag=${tag} plugin.json=${plugin_version} expected=${expected}"
+          if [ "$tag" != "$expected" ]; then
+            echo "::error::Tag ${tag} does not match plugin.json version (${expected}). Bump plugin/.claude-plugin/plugin.json before tagging."
+            exit 1
+          fi
+
+      - name: goreleaser release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
